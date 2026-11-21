@@ -72,17 +72,17 @@ public class MainActivity extends Activity {
         gap(outer,18);
         LinearLayout hero=vertical();pad(hero,20);hero.setGravity(Gravity.CENTER);hero.setBackground(panel(PANEL,26));outer.addView(hero);
         boostLabel=text(boostPercent+"%",47,WHITE,true);boostLabel.setGravity(Gravity.CENTER);hero.addView(boostLabel);
-        TextView hint=text("CLEAN BOOST + EXTRA LOUDNESS MODE",12,CYAN,true);hint.setGravity(Gravity.CENTER);hero.addView(hint);
+        TextView hint=text("LOCAL MUSIC BOOST • NOT SYSTEM-WIDE",12,CYAN,true);hint.setGravity(Gravity.CENTER);hero.addView(hint);
         boostBar=bar(headphones?60:100,boostPercent-100,p->{
             boostPercent=100+p;boostLabel.setText(boostPercent+"%"); save(); applyFx();
         });hero.addView(boostBar);
-        TextView caution=text("200% = up to 2x signal amplitude, not 2x perceived loudness. Local music only. Start low.",12,MUTED,false);
+        TextView caution=text("Boost works ONLY on music played through this app. Choose a file below, press Play, then compare Normal and Boost.",12,MUTED,false);
         caution.setGravity(Gravity.CENTER);hero.addView(caution);
         gap(outer,13);
         LinearLayout controls=vertical();pad(controls,15);controls.setBackground(panel(PANEL,20));outer.addView(controls);
-        TextView source=text("YOUR MUSIC",14,CYAN,true);controls.addView(source);
+        TextView source=text("STEP 1 • PLAY AUDIO IN THIS APP",14,CYAN,true);controls.addView(source);
         trackLabel=text(selected!=null?"Selected: "+selected.getLastPathSegment():"No audio selected",15,WHITE,true);controls.addView(trackLabel);gap(controls,8);
-        button(controls,"＋  CHOOSE AUDIO FILE",()->{
+        button(controls,"＋  CHOOSE MUSIC FILE TO BOOST",()->{
             Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(i,123);
@@ -92,13 +92,18 @@ public class MainActivity extends Activity {
         button(actions,"■  STOP",()->stopMusic());
         gap(outer,13);
         LinearLayout fx=vertical();pad(fx,16);fx.setBackground(panel(PANEL,20));outer.addView(fx);
-        TextView header=text("SOUND TUNING",16,CYAN,true);fx.addView(header);
+        TextView header=text("STEP 2 • HEAR THE DIFFERENCE",16,CYAN,true);fx.addView(header);
+        button(fx,"↔  COMPARE NORMAL / BOOST",()->{
+            if(player==null||!prepared){status("First choose a music file and press Play. Other apps cannot be boosted.");return;}
+            enhancements=!enhancements;save();applyFx();setupUI();
+            status(enhancements?"BOOST ON • Listen to your music":"NORMAL • Compare with boost");
+        });
         button(fx,enhancements?"✓  ENHANCEMENT ON":"○  ENHANCEMENT OFF",()->{
             enhancements=!enhancements;save();applyFx();setupUI();
         });
         button(fx,extraLoud?"✓  EXTRA LOUDNESS: ON":"＋  EXTRA LOUDNESS: OFF",()->{
             extraLoud=!extraLoud;save();applyFx();setupUI();
-            status("Extra Loudness improves quieter audio with compression. Keep device volume moderate.");
+            status("Extra Loudness compresses quiet passages of your local song. It cannot exceed hardware volume limits.");
         });
         TextView extraInfo=text("Extra Loudness: brings softer parts forward without lifting the device hardware limit.",12,MUTED,false);
         fx.addView(extraInfo);
@@ -126,10 +131,14 @@ public class MainActivity extends Activity {
         gap(outer,14);
         wave=new Wave(this);wave.setBackground(panel(PANEL,20));
         outer.addView(wave,new LinearLayout.LayoutParams(-1,dp(86)));
-        status=text("Choose a music file to begin. Waveform requires audio permission.",12,MUTED,false);
+        status=text(prepared?"Music ready • Boost changes only this audio":"No audio selected. System-wide boost is not supported; choose a local music file.",12,MUTED,false);
         status.setGravity(Gravity.CENTER);outer.addView(status);
         gap(outer,6);
-        TextView footer=text("Do not exceed comfortable loudness. 200% is signal gain, not 200% actual speaker volume. Lower volume if harsh.",12,MUTED,false);
+        button(outer,"⚙  ANDROID SOUND SETTINGS",()->{
+            try{startActivity(new Intent(android.provider.Settings.ACTION_SOUND_SETTINGS));}
+            catch(Exception e){status("Sound settings are unavailable on this device.");}
+        });
+        TextView footer=text("For apps like YouTube, use your phone\'s built-in sound effects if available. This app cannot override Android hardware output limits.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);outer.addView(footer);
         updatePlayLabel();
     }
@@ -148,7 +157,10 @@ public class MainActivity extends Activity {
         TextView b=text(text,12,WHITE,true);
         b.setGravity(Gravity.CENTER);b.setPadding(dp(10),dp(13),dp(10),dp(13));
         b.setBackground(panel(Color.rgb(23,61,87),14));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);lp.setMargins(dp(2),dp(5),dp(2),dp(5));
+        LinearLayout.LayoutParams lp=parent.getOrientation()==LinearLayout.HORIZONTAL
+            ? new LinearLayout.LayoutParams(0,dp(48),1)
+            : new LinearLayout.LayoutParams(-1,dp(48));
+        lp.setMargins(dp(2),dp(5),dp(2),dp(5));
         parent.addView(b,lp);b.setOnClickListener(v->run.run());return b;
     }
     void save(){prefs.edit().putBoolean("extra_loud",extraLoud).putInt("boost_percent",boostPercent).putInt("bass",bassPct).putInt("treble",treblePct).putInt("preset",preset).putBoolean("headphones",headphones).putBoolean("on",enhancements).apply();}
@@ -171,7 +183,7 @@ public class MainActivity extends Activity {
             player.setDataSource(this,selected);
             player.setOnPreparedListener(mp->{
                 prepared=true;attachFx();requestFocus();mp.start();updatePlayLabel();
-                status("Playing local audio with compatible audio-session effects.");
+                status("Playing locally. Slide boost above 100%, then tap Compare Normal / Boost to check the effect.");
                 if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
                     requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},99);
                 else setupVisualizer();
@@ -253,7 +265,7 @@ public class MainActivity extends Activity {
                 boolean active=enhancements&&extraLoud;
                 dynamics.setMbcBandAllChannelsTo(0,new DynamicsProcessing.MbcBand(
                     true,20000.0f,10.0f,140.0f,
-                    active?2.2f:1.0f,-24.0f,6.0f,-80.0f,1.0f,0.0f,active?2.0f:0.0f));
+                    active?2.8f:1.0f,-30.0f,6.0f,-80.0f,1.0f,0.0f,active?3.0f:0.0f));
             }
         }catch(Exception ignored){}
         try{
