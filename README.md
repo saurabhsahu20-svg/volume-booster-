@@ -1,7 +1,10 @@
-# Crystal Volume Booster
-A native Android local-audio playback app with adjustable loudness, bass, equalizer, system media-volume slider, headphone/speaker profiles and optional waveform visualizer.
-Enhancements are scoped to **audio played in this app**. Android does not permit ordinary apps to reliably process all other apps or phone calls. Safe maximum boost: 3 dB headphone profile, 5 dB speaker profile (device-dependent and not a guarantee of safe listening).
-## Get an APK
-Open Actions > Build Crystal Volume Booster APK > successful run > Artifacts > CrystalVolumeBooster-v1.2-APK. Extract its ZIP and install app-debug.apk.
-## Build locally
-Android SDK 35, JDK 17, Gradle 8.9; run `gradle :app:assembleDebug`.
+# Crystal Volume Booster v1.3
+
+Native Android local-audio player with 100–200% signal boost, voice presets and audio effects.
+- Speaker profile: 100–200% requested signal gain (up to +6.02 dB); headphone profile: 100–160% maximum as a precaution.
+- On supported Android devices, uses DynamicsProcessing limiter with -2 dBFS threshold, 20:1 ratio and smooth gain ramp; falls back to LoudnessEnhancer where unsupported.
+- 200% means an input signal multiplier, NOT guaranteed doubling of actual speaker loudness. Loud tracks may hit the limiter; hardware and hearing-safety limits still apply.
+- **Effects apply only to music selected and played inside this app**, not streaming apps, calls or other apps.
+- Hearing protection: start at normal volume; if sound is harsh, lower gain and device volume.
+
+Download debug APK under GitHub Actions > successful Build Crystal Volume Booster APK run > Artifacts > CrystalVolumeBooster-v1.3-APK. Extract app-debug.apk.
