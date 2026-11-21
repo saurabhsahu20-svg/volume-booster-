@@ -24,6 +24,36 @@ public class MainActivity extends Activity {
     Uri selected; TextView status,boostLabel,trackLabel,outputLabel,playLabel,systemLabel; SeekBar boostBar,systemBar,bassBar,trebleBar;
     Wave wave; android.content.SharedPreferences prefs;
     final String[] presets={"FLAT","VOICE","BASS","BRIGHT"};
+    final Runnable mediaMonitor=new Runnable(){
+        @Override public void run(){
+            refreshMediaVolume();
+            handler.postDelayed(this,750);
+        }
+    };
+    void refreshMediaVolume(){
+        if(audio==null)return;
+        try{
+            int v=audio.getStreamVolume(AudioManager.STREAM_MUSIC);
+            if(systemLabel!=null)systemLabel.setText("Current media level: "+Math.round(100f*v/Math.max(1,systemMax))+"% (device range)");
+            if(systemBar!=null&&systemBar.getProgress()!=v)systemBar.setProgress(v);
+        }catch(Exception ignored){}
+    }
+    void setMediaLevel(int newLevel){
+        try{
+            audio.setStreamVolume(AudioManager.STREAM_MUSIC,
+                Math.max(0,Math.min(systemMax,newLevel)),0);
+            refreshMediaVolume();
+        }catch(Exception e){status("This device cannot change media volume from the app.");}
+    }
+    @Override protected void onResume(){
+        super.onResume();
+        handler.removeCallbacks(mediaMonitor);
+        handler.post(mediaMonitor);
+    }
+    @Override protected void onPause(){
+        handler.removeCallbacks(mediaMonitor);
+        super.onPause();
+    }
     final android.content.BroadcastReceiver noisyReceiver=new android.content.BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
             if(AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(i.getAction()) && player!=null && player.isPlaying()) {
@@ -68,7 +98,23 @@ public class MainActivity extends Activity {
         LinearLayout outer=vertical();outer.setBackgroundColor(BG);pad(outer,18);
         scroll.addView(outer);setContentView(scroll);
         TextView brand=text("✦ CRYSTAL VOLUME",23,CYAN,true);brand.setGravity(Gravity.CENTER);outer.addView(brand);
-        TextView sub=text("Pure voice  •  Clean sound  •  Safe boost",13,MUTED,false);sub.setGravity(Gravity.CENTER);outer.addView(sub);
+        TextView sub=text("Device Media Controls + Local Audio Enhancements",13,MUTED,false);sub.setGravity(Gravity.CENTER);outer.addView(sub);
+        gap(outer,16);
+        LinearLayout device=vertical();pad(device,16);device.setBackground(panel(PANEL,22));outer.addView(device);
+        TextView deviceTitle=text("🔊  DEVICE MEDIA VOLUME",18,CYAN,true);device.addView(deviceTitle);
+        TextView deviceDesc=text("This changes the normal media volume used by many video and music apps. It cannot go above your phone's maximum.",12,MUTED,false);device.addView(deviceDesc);
+        systemLabel=text("",16,WHITE,true);device.addView(systemLabel);
+        systemBar=bar(Math.max(1,systemMax),audio.getStreamVolume(AudioManager.STREAM_MUSIC),p->setMediaLevel(p));
+        device.addView(systemBar);
+        LinearLayout volumeButtons=new LinearLayout(this);volumeButtons.setOrientation(LinearLayout.HORIZONTAL);device.addView(volumeButtons);
+        button(volumeButtons,"−  DOWN",()->setMediaLevel(audio.getStreamVolume(AudioManager.STREAM_MUSIC)-1));
+        button(volumeButtons,"＋  UP",()->setMediaLevel(audio.getStreamVolume(AudioManager.STREAM_MUSIC)+1));
+        button(device,"⚙  PHONE SOUND SETTINGS",()->{
+            try{startActivity(new Intent(android.provider.Settings.ACTION_SOUND_SETTINGS));}
+            catch(Exception e){status("Sound settings not supported on this device.");}
+        });
+        TextView deviceNote=text("Phone EQ, Dolby and sound effects (if available) are found in system settings. This app does not exceed Android's output limit.",12,MUTED,false);device.addView(deviceNote);
+        refreshMediaVolume();
         gap(outer,18);
         LinearLayout hero=vertical();pad(hero,20);hero.setGravity(Gravity.CENTER);hero.setBackground(panel(PANEL,26));outer.addView(hero);
         boostLabel=text(boostPercent+"%",47,WHITE,true);boostLabel.setGravity(Gravity.CENTER);hero.addView(boostLabel);
@@ -125,9 +171,7 @@ public class MainActivity extends Activity {
             save();setupUI();applyFx();
         });
         gap(output,8);
-        line(output,"SYSTEM MEDIA VOLUME",systemBar=bar(systemMax,audio.getStreamVolume(AudioManager.STREAM_MUSIC),p->{
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC,p,0);
-        }));
+        TextView outputNote=text("Speaker/headphone safety profiles only affect local music playback.",12,MUTED,false);output.addView(outputNote);
         gap(outer,14);
         wave=new Wave(this);wave.setBackground(panel(PANEL,20));
         outer.addView(wave,new LinearLayout.LayoutParams(-1,dp(86)));
@@ -327,6 +371,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy(){
         try{unregisterReceiver(noisyReceiver);}catch(Exception ignored){}
+        handler.removeCallbacks(mediaMonitor);
         releasePlayer();super.onDestroy();
     }
     class Wave extends View {
