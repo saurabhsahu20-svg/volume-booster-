@@ -38,6 +38,6 @@ jobs:
       - name: Save installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: CrystalVolumeBooster-v1.4-APK
+          name: CrystalVolumeBooster-v1.5-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
