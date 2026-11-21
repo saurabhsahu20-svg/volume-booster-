@@ -198,10 +198,12 @@ public class MainActivity extends Activity {
         int id=player.getAudioSessionId();
         // Input gain and limiter share the same processing pipeline on compatible devices.
         try {
+            DynamicsProcessing.Mbc mbc = new DynamicsProcessing.Mbc(true,true,1);
+            mbc.setBand(0,new DynamicsProcessing.MbcBand(
+                    true,20000.0f,10.0f,140.0f,1.0f,-24.0f,6.0f,-80.0f,1.0f,0.0f,0.0f));
             DynamicsProcessing.Config cfg=new DynamicsProcessing.Config.Builder(
                 DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,2,false,0,true,1,false,0,true)
-                .setMbcBandAllChannelsTo(0,new DynamicsProcessing.MbcBand(
-                    true,20000.0f,10.0f,140.0f,1.0f,-24.0f,6.0f,-80.0f,1.0f,0.0f,0.0f))
+                .setMbcAllChannelsTo(mbc)
                 .setLimiterAllChannelsTo(new DynamicsProcessing.Limiter(true,true,0,1.0f,95.0f,20.0f,-2.0f,0.0f))
                 .build();
             dynamics=new DynamicsProcessing(0,id,cfg);
