@@ -18,7 +18,7 @@ public class MainActivity extends Activity {
     final int BG=Color.rgb(6,14,30), PANEL=Color.rgb(17,31,52), CYAN=Color.rgb(67,220,248), WHITE=Color.WHITE, MUTED=Color.rgb(169,192,209);
     final Handler handler=new Handler(Looper.getMainLooper());
     AudioManager audio; MediaPlayer player; LoudnessEnhancer loud; DynamicsProcessing dynamics; Equalizer equalizer; BassBoost bassBoost; Visualizer visualizer;
-    AudioFocusRequest focusRequest; boolean enhancements=true, headphones=false, prepared=false;
+    AudioFocusRequest focusRequest; boolean enhancements=true, headphones=false, prepared=false, extraLoud=false;
     int boostPercent=100, bassPct=20, treblePct=25, preset=0, systemMax;
     float appliedGainDb=0f;
     Uri selected; TextView status,boostLabel,trackLabel,outputLabel,playLabel,systemLabel; SeekBar boostBar,systemBar,bassBar,trebleBar;
@@ -40,7 +40,7 @@ public class MainActivity extends Activity {
         boostPercent=prefs.getInt("boost_percent",100+Math.round(Math.min(5,prefs.getInt("gain",0))*100f/6f));
         boostPercent=Math.max(100,Math.min(200,boostPercent));
         bassPct=prefs.getInt("bass",20); treblePct=prefs.getInt("treble",25);
-        headphones=prefs.getBoolean("headphones",false); preset=prefs.getInt("preset",0); enhancements=prefs.getBoolean("on",true);
+        headphones=prefs.getBoolean("headphones",false); preset=prefs.getInt("preset",0); enhancements=prefs.getBoolean("on",true); extraLoud=prefs.getBoolean("extra_loud",false);
         if(headphones)boostPercent=Math.min(boostPercent,160);
         setupUI();
         IntentFilter f=new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY);
@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
         gap(outer,18);
         LinearLayout hero=vertical();pad(hero,20);hero.setGravity(Gravity.CENTER);hero.setBackground(panel(PANEL,26));outer.addView(hero);
         boostLabel=text(boostPercent+"%",47,WHITE,true);boostLabel.setGravity(Gravity.CENTER);hero.addView(boostLabel);
-        TextView hint=text("BOOST SIGNAL • UP TO 200%",12,CYAN,true);hint.setGravity(Gravity.CENTER);hero.addView(hint);
+        TextView hint=text("CLEAN BOOST + EXTRA LOUDNESS MODE",12,CYAN,true);hint.setGravity(Gravity.CENTER);hero.addView(hint);
         boostBar=bar(headphones?60:100,boostPercent-100,p->{
             boostPercent=100+p;boostLabel.setText(boostPercent+"%"); save(); applyFx();
         });hero.addView(boostBar);
@@ -96,6 +96,12 @@ public class MainActivity extends Activity {
         button(fx,enhancements?"✓  ENHANCEMENT ON":"○  ENHANCEMENT OFF",()->{
             enhancements=!enhancements;save();applyFx();setupUI();
         });
+        button(fx,extraLoud?"✓  EXTRA LOUDNESS: ON":"＋  EXTRA LOUDNESS: OFF",()->{
+            extraLoud=!extraLoud;save();applyFx();setupUI();
+            status("Extra Loudness improves quieter audio with compression. Keep device volume moderate.");
+        });
+        TextView extraInfo=text("Extra Loudness: brings softer parts forward without lifting the device hardware limit.",12,MUTED,false);
+        fx.addView(extraInfo);
         TextView eqTitle=text("EQ PRESET: "+presets[Math.max(0,Math.min(3,preset))],13,MUTED,true);fx.addView(eqTitle);
         LinearLayout row=new LinearLayout(this);row.setOrientation(0);fx.addView(row);
         for(int i=0;i<4;i++) {
@@ -123,7 +129,7 @@ public class MainActivity extends Activity {
         status=text("Choose a music file to begin. Waveform requires audio permission.",12,MUTED,false);
         status.setGravity(Gravity.CENTER);outer.addView(status);
         gap(outer,6);
-        TextView footer=text("Sound may distort at high levels. Reduce gain if harsh. Avoid long listening at high volume.",12,MUTED,false);
+        TextView footer=text("Do not exceed comfortable loudness. 200% is signal gain, not 200% actual speaker volume. Lower volume if harsh.",12,MUTED,false);
         footer.setGravity(Gravity.CENTER);outer.addView(footer);
         updatePlayLabel();
     }
@@ -145,7 +151,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(48),1);lp.setMargins(dp(2),dp(5),dp(2),dp(5));
         parent.addView(b,lp);b.setOnClickListener(v->run.run());return b;
     }
-    void save(){prefs.edit().putInt("boost_percent",boostPercent).putInt("bass",bassPct).putInt("treble",treblePct).putInt("preset",preset).putBoolean("headphones",headphones).putBoolean("on",enhancements).apply();}
+    void save(){prefs.edit().putBoolean("extra_loud",extraLoud).putInt("boost_percent",boostPercent).putInt("bass",bassPct).putInt("treble",treblePct).putInt("preset",preset).putBoolean("headphones",headphones).putBoolean("on",enhancements).apply();}
     void status(String s){if(status!=null)status.setText(s);}
     @Override protected void onActivityResult(int req,int result,Intent data){
         super.onActivityResult(req,result,data);
@@ -193,7 +199,9 @@ public class MainActivity extends Activity {
         // Input gain and limiter share the same processing pipeline on compatible devices.
         try {
             DynamicsProcessing.Config cfg=new DynamicsProcessing.Config.Builder(
-                DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,2,false,0,false,0,false,0,true)
+                DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,2,false,0,true,1,false,0,true)
+                .setMbcBandAllChannelsTo(0,new DynamicsProcessing.MbcBand(
+                    true,20000.0f,10.0f,140.0f,1.0f,-24.0f,6.0f,-80.0f,1.0f,0.0f,0.0f))
                 .setLimiterAllChannelsTo(new DynamicsProcessing.Limiter(true,true,0,1.0f,95.0f,20.0f,-2.0f,0.0f))
                 .build();
             dynamics=new DynamicsProcessing(0,id,cfg);
@@ -236,6 +244,16 @@ public class MainActivity extends Activity {
     void applyFx(){
         handler.removeCallbacks(gainRamp);
         handler.post(gainRamp);
+        // Transparent normal mode or gentle loudness compression for quiet passages.
+        // Keep final limiter active to avoid clipping at the digital output.
+        try{
+            if(dynamics!=null){
+                boolean active=enhancements&&extraLoud;
+                dynamics.setMbcBandAllChannelsTo(0,new DynamicsProcessing.MbcBand(
+                    true,20000.0f,10.0f,140.0f,
+                    active?2.2f:1.0f,-24.0f,6.0f,-80.0f,1.0f,0.0f,active?2.0f:0.0f));
+            }
+        }catch(Exception ignored){}
         try{
             if(equalizer!=null){
                 short[] range=equalizer.getBandLevelRange();
@@ -253,7 +271,7 @@ public class MainActivity extends Activity {
                 }
             }
         }catch(Exception ignored){}
-        try{if(bassBoost!=null)bassBoost.setStrength((short)(enhancements?Math.min(600,bassPct*10):0));}catch(Exception ignored){}
+        try{if(bassBoost!=null)bassBoost.setStrength((short)(enhancements?Math.min(400,bassPct*7):0));}catch(Exception ignored){}
     }
     void playPause(){
         if(player==null||!prepared){if(selected!=null)prepareMusic();else status("Choose an audio file first.");return;}
