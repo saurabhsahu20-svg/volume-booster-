@@ -1,4 +1,4 @@
-name: Build Crystal Volume Booster APK
+name: Build S Volume Booster APK
 on:
   push:
     branches: [main]
@@ -34,10 +34,10 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Compile Android APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :svolume:assembleDebug
       - name: Save installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: CrystalVolumeBooster-v1.6-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: SVolumeBooster-v1.0-APK
+          path: svolume/build/outputs/apk/debug/svolume-debug.apk
           if-no-files-found: error
